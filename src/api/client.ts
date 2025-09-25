@@ -13,7 +13,7 @@ export function createClient(token?: string | null) {
       config.headers = config.headers ?? {};
       config.headers.Authorization = `Bearer ${token}`;
 
-      // Fallback for servers that drop Authorization
+      // Fallback for servers that drop Authorization:
       config.params = { ...(config.params || {}), token };
 
       return config;

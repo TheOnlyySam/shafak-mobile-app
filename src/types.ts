@@ -1,11 +1,72 @@
-export type Role = 'ADMIN' | 'AGENT' | 'SUPER';
-export type User = { id: string | number; username?: string; email?: string; role: Role };
+// src/types.ts
 export type Car = {
-  id: number;
-  make: string;
-  model: string;
+  id: string;
+
+  // display (list) fields
+  make?: string | null;
+  model?: string | null;
   year?: number | null;
-  agent_id: number;
-  agent_name?: string;
-  agent_email?: string;
+  vin?: string | null;
+  status?: string | null;
+  title?: number | 0 | 1 | boolean | null;
+  eta?: string | null;                // YYYY-MM-DD
+  containerNumber?: string | null;
+  destination?: string | null;
+  terminal?: string | null;           // terminal *name*
+  agent_id?: string | null;
+  agent_username?: string | null;
+  agent_name?: string | null;         // <— add this (preferred for display)
+  image?: string | null;
+
+  // admin edit / DB columns
+  makingYear?: number | null;
+  modelid?: string | null;
+  userid?: string | null;
+  terminalid?: string | null;         // snake_case to match DB
+  note?: string | null;
+
+  // web-form extras
+  auctionType?: 'COPART' | 'IAAI' | 'MANHEIM' | null;
+  brandId?: string | null;            // brand→model helper
+  color?: string | null;
+  lot?: string | null;
+  carKey?: 0 | 1 | null;
+  issueDate?: string | null;          // YYYY-MM-DD
 };
+
+export type CarSavePayload = {
+  id?: string;
+
+  // vehicle
+  makingYear?: number | null;
+  vin?: string | null;
+  modelid?: string | null;
+  brandId?: string | null;
+  color?: string | null;
+  lot?: string | null;
+  carKey?: 0 | 1 | null;
+  title?: 0 | 1 | null;
+  issueDate?: string | null;
+
+  // assignment
+  userid?: string | null;
+  terminalid?: string | null;
+
+  // logistics
+  auctionType?: 'COPART' | 'IAAI' | 'MANHEIM' | null;
+  destination?: string | null;
+  status?: string | null;
+  eta?: string | null;
+  containerNumber?: string | null;
+
+  note?: string | null;
+};
+
+// small option types for pickers
+export type Brand = { id: string; name: string };
+export type Model = { id: string; name: string; brandId?: string | null };
+
+// IMPORTANT: switch to full name, keep username optional for fallback
+export type Agent = { id: string; name: string; username?: string | null };
+
+export type Terminal = { id: string; name: string };
