@@ -113,6 +113,18 @@ export default function AdminCarsScreen() {
     try {
       const res = await client.post('/car_save.php', payload);
       if (!res.data?.ok) throw new Error(res.data?.error || 'Save failed');
+
+      const carId = payload.id ?? res.data?.id; // handle create vs edit
+      if (carId && payload._uploadedFile) {
+        // put it into car_images (gallery) AND set as main
+        await client.post('/car_image_set.php', {
+          carId,
+          image: payload._uploadedFile, // this is the bare filename we just uploaded
+          type: 'CAR',
+          makeMain: true,
+        });
+      }
+
       setModalOpen(false);
       setEditing(null);
       await load();

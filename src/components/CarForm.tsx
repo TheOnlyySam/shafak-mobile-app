@@ -6,6 +6,32 @@ import {
 import type { Car, CarSavePayload, Brand, Model, Agent, Terminal } from '../types';
 import { createClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { Image } from 'expo-image';
+
+import * as ImagePicker from 'expo-image-picker';
+
+// --- helpers to preserve existing IDs when the user doesn't change pickers ---
+const pick = <T,>(...vals: (T | null | undefined | '')[]) =>
+  vals.find(v => v !== undefined && v !== null && v !== '') as T | null;
+
+const keep = <T,>(prev: T | null | undefined, next: T | null | undefined) =>
+  (next === '' || next === null || next === undefined) ? (prev ?? null) : next;
+
+const norm = (s?: string | null) => (s ?? '').toString().trim().toLowerCase();
+
+const resolveBrandIdFromName = (name?: string | null, list: Brand[] = []) => {
+  const n = norm(name);
+  if (!n) return null;
+  const found = list.find(b => norm((b as any).name) === n);
+  return (found as any)?.id ?? null;
+};
+
+const resolveModelIdFromName = (name?: string | null, list: Model[] = []) => {
+  const n = norm(name);
+  if (!n) return null;
+  const found = list.find(m => norm((m as any).name) === n);
+  return (found as any)?.id ?? null;
+};
 
 type Props = {
   initial?: Partial<Car>;
@@ -14,7 +40,7 @@ type Props = {
   loading?: boolean;
 };
 
-const STATUS_OPTIONS = ['LOADED', 'WAREHOUSE', 'SHIPPED', 'ON HOLD'] as const;
+const STATUS_OPTIONS = ['LOADED', 'WAREHOUSE'] as const;
 const AUCTION_OPTIONS = ['COPART', 'IAAI', 'MANHEIM'] as const;
 
 // destination option shape for picker (id = slug)
@@ -126,13 +152,20 @@ function PickerModal<T extends { id: string; name?: string | null; label?: strin
 
 export default function CarForm({ initial, onCancel, onSubmit, loading }: Props) {
   const id = useMemo(() => (initial as any)?.id as string | undefined, [initial]);
+  const initialImage = (initial as any)?.image ?? (initial as any)?.image_url ?? null;
+  const [imageUri, setImageUri] = useState<string | null>(initialImage);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // ---- state (vehicle)
   const [makingYear, setYear] = useState(String(initial?.makingYear ?? initial?.year ?? ''));
   const [vin, setVin] = useState(initial?.vin ?? '');
-  const [brandId, setBrandId] = useState<string | null>((initial as any)?.brandId ?? null);
+  const [brandId, setBrandId] = useState<string | null>(
+    pick((initial as any)?.brandId, (initial as any)?.brand_id, (initial as any)?.brandid)
+  );
   const [brandName, setBrandName] = useState<string | null>(initial?.make ?? null);
-  const [modelid, setModelId] = useState<string | null>((initial as any)?.modelid ?? null);
+  const [modelid, setModelId] = useState<string | null>(
+    pick((initial as any)?.modelid, (initial as any)?.modelId, (initial as any)?.model_id)
+  );
   const [modelName, setModelName] = useState<string | null>(initial?.model ?? null);
   const [color, setColor] = useState((initial as any)?.color ?? '');
   const [lot, setLot] = useState((initial as any)?.lot ?? '');
@@ -143,8 +176,12 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
   const [issueDate, setIssueDate] = useState((initial as any)?.issueDate ?? '');
 
   // ---- assignment
-  const [userid, setUserId] = useState((initial as any)?.userid ?? initial?.agent_id ?? '');
-  const [terminalid, setTerminalId] = useState((initial as any)?.terminalid ?? '');
+  const [userid, setUserId] = useState<string | null>(
+    pick((initial as any)?.userid, (initial as any)?.userId, (initial as any)?.agent_id)
+  );
+  const [terminalid, setTerminalId] = useState<string | null>(
+    pick((initial as any)?.terminalid, (initial as any)?.terminalId, (initial as any)?.terminal_id)
+  );
 
   // ---- logistics
   const [auctionType, setAuctionType] =
@@ -254,6 +291,7 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
     }
   }
 
+
   const [brandOpen, setBrandOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
@@ -273,14 +311,124 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
     fetchModelsFor(brandId);
   }, [brandId]);
 
-  function save() {
-    const payload: CarSavePayload & Record<string, any> = {
+  // If we only have brand *name* from the list API, map it to an ID once brands are loaded
+  useEffect(() => {
+    if (!brandId && brandName && brands.length) {
+      const guess = resolveBrandIdFromName(brandName, brands);
+      if (guess) {
+        setBrandId(guess);
+        const bn = (brands.find(b => (b as any).id === guess) as any)?.name;
+        if (bn) setBrandName(bn);
+      }
+    }
+  }, [brands, brandName, brandId]);
+
+  // If we only have model *name*, map it to an ID once models (for the brand) are loaded
+  useEffect(() => {
+    if (brandId && !modelid && modelName && models.length) {
+      const guess = resolveModelIdFromName(modelName, models);
+      if (guess) {
+        setModelId(guess);
+        const mn = (models.find(m => (m as any).id === guess) as any)?.name;
+        if (mn) setModelName(mn);
+      }
+    }
+  }, [models, modelName, modelid, brandId]);
+
+  // --- image picker helpers ---
+  async function pickImage() {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow photo library access to choose a picture.');
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.85,
+      });
+      if (!res.canceled && res.assets && res.assets.length) {
+        const asset = res.assets[0];
+        setImageUri(asset.uri);
+      }
+    } catch (e) {
+      console.log('pickImage error', e);
+    }
+  }
+
+  async function uploadImageIfNeeded(uri: string): Promise<{ url: string; file: string } | null> {
+    if (!uri) return null;
+    // If already a remote URL, skip uploading; we don't have a server filename.
+    if (/^https?:\/\//i.test(uri)) return { url: uri, file: '' };
+
+    setUploadingImage(true);
+    try {
+      const name = (uri.split('/').pop() || 'photo.jpg');
+      const ext = (name.split('.').pop() || '').toLowerCase();
+      const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      const form = new FormData();
+      form.append('file', { uri, name, type } as any);
+
+      const r = await client.post('/upload_image.php', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const url =
+        typeof r.data === 'string'
+          ? r.data
+          : (r.data?.url || r.data?.path || r.data?.location || '');
+      const file = (r.data?.file || '').toString();
+
+      if (!url) throw new Error('No upload URL returned');
+      return { url, file };
+    } catch (e: any) {
+      console.log('uploadImage error', e?.response?.status, e?.response?.data || e?.message);
+      Alert.alert('Upload failed', e?.response?.data?.error ?? e?.message ?? 'Could not upload image');
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  async function save() {
+    // Upload the image if needed (local file URI -> remote URL + filename)
+    let uploaded: { url: string; file: string } | null = null;
+    let mainImage = imageUri ?? ((initial as any)?.image ?? (initial as any)?.image_url ?? null);
+    if (imageUri && !/^https?:\/\//i.test(String(imageUri))) {
+      uploaded = await uploadImageIfNeeded(String(imageUri));
+      if (uploaded?.url) {
+        mainImage = uploaded.url;
+      }
+    }
+
+    // previous values from the existing record (support multiple casings)
+    const prevBrandId    = pick((initial as any)?.brandId,    (initial as any)?.brand_id,    (initial as any)?.brandid);
+    const prevModelId    = pick((initial as any)?.modelid,    (initial as any)?.modelId,     (initial as any)?.model_id);
+    const prevUserId     = pick((initial as any)?.userid,     (initial as any)?.userId,      (initial as any)?.agent_id);
+    const prevTerminalId = pick((initial as any)?.terminalid, (initial as any)?.terminalId,  (initial as any)?.terminal_id);
+
+    // Resolve brand/model IDs if the edit form only had names
+    const brandIdResolved =
+      brandId ??
+      resolveBrandIdFromName(brandName, brands) ??
+      prevBrandId ??
+      null;
+
+    const modelIdResolved =
+      modelid ??
+      resolveModelIdFromName(modelName, models) ??
+      prevModelId ??
+      null;
+
+    // Build payload; IMPORTANT: only include brand/model keys if we have a value,
+    // otherwise the server might overwrite them with NULL.
+    const payload: any = {
       id,
       // vehicle
       makingYear: makingYear ? Number(makingYear) : null,
       vin: vin || null,
-      brandId: brandId ?? null,
-      modelid: modelid ?? null, // DB snake (mobile API)
       color: color || null,
       lot: lot || null,
       carKey: carKey ?? 0,
@@ -288,8 +436,8 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
       issueDate: issueDate || null,
 
       // assignment
-      userid: userid || null,         // DB snake
-      terminalid: terminalid || null, // DB snake
+      userid:     keep(prevUserId, userid),
+      terminalid: keep(prevTerminalId, terminalid),
 
       // logistics
       auctionType: auctionType ?? null,
@@ -299,12 +447,26 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
       containerNumber: containerNumber || null,
 
       note: note || null,
+
+      // image (server-side main image field; include a few common aliases)
+      image: mainImage || null,
+      image_url: mainImage || null,
+
+      // send the uploaded server filename so the screen can link it into car_images (and set as main)
+      _uploadedFile: uploaded?.file ?? null,
     };
 
+    if (brandIdResolved !== null && brandIdResolved !== undefined && brandIdResolved !== '') {
+      payload.brandId = brandIdResolved;
+    }
+    if (modelIdResolved !== null && modelIdResolved !== undefined && modelIdResolved !== '') {
+      payload.modelid = modelIdResolved;
+    }
+
     // --- extra keys to satisfy the website controllers (camel) ---
-    payload.modelId = payload.modelid;
-    payload.userId = payload.userid;
-    payload.terminalId = payload.terminalid;
+    if (payload.modelid != null) payload.modelId = payload.modelid;
+    if (payload.userid  != null) payload.userId  = payload.userid;
+    if (payload.terminalid != null) payload.terminalId = payload.terminalid;
     payload.car_key = carKey ?? 0; // controller expects car_key presence
     // -------------------------------------------------------------
 
@@ -341,6 +503,31 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
           <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
             <Label>VIN</Label>
             <Input value={vin} onChangeText={setVin} autoCapitalize="characters" />
+          </View>
+
+          <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+            <Label>Photo</Label>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 88, height: 66, borderRadius: 10, overflow: 'hidden', backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', justifyContent: 'center', alignItems: 'center' }}>
+                {imageUri ? (
+                  <Image source={{ uri: imageUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                ) : (
+                  <Text style={{ color: '#9ca3af' }}>No photo</Text>
+                )}
+              </View>
+
+              <Pressable onPress={pickImage} style={{ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' }}>
+                <Text style={{ fontWeight: '700', color: '#1f2937' }}>{imageUri ? 'Change photo' : 'Add photo'}</Text>
+              </Pressable>
+
+              {imageUri ? (
+                <Pressable onPress={() => setImageUri(null)} style={{ marginLeft: 6, paddingHorizontal: 10, paddingVertical: 10 }}>
+                  <Text style={{ color: '#ef4444', fontWeight: '700' }}>Remove</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {uploadingImage ? <Text style={{ color: '#6b7280', marginTop: 6 }}>Uploading…</Text> : null}
           </View>
 
           {/* brand picker */}
@@ -447,8 +634,8 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
         <Pressable onPress={onCancel} style={{ flex: 1, backgroundColor: '#eef2ff', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
           <Text style={{ color: '#1f4fb3', fontWeight: '800' }}>Cancel</Text>
         </Pressable>
-        <Pressable disabled={loading} onPress={save} style={{ flex: 1, backgroundColor: '#2e6dd8', opacity: loading ? 0.6 : 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
-          <Text style={{ color: '#fff', fontWeight: '800' }}>{loading ? 'Saving…' : 'Save'}</Text>
+        <Pressable disabled={loading || uploadingImage} onPress={save} style={{ flex: 1, backgroundColor: '#2e6dd8', opacity: (loading || uploadingImage) ? 0.6 : 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+          <Text style={{ color: '#fff', fontWeight: '800' }}>{uploadingImage ? 'Uploading…' : (loading ? 'Saving…' : 'Save')}</Text>
         </Pressable>
       </View>
 
