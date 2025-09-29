@@ -74,12 +74,11 @@ export default function AdminCarsScreen() {
 
       <Modal visible={modalOpen} animationType="slide" onRequestClose={() => setModalOpen(false)}>
         <View style={{ flex: 1, padding: 16 }}>
-          <CarForm
-            initial={editing ?? undefined}
-            loading={saving}
-            onCancel={() => setModalOpen(false)}
-            onSubmit={onSubmit}
-          />
+        <CarForm
+  initial={editing ?? undefined}
+  onCancel={() => setModalOpen(false)}
+  onSubmit={onSubmit as any}
+/>
         </View>
       </Modal>
     </View>

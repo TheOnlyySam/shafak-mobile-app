@@ -1,7 +1,7 @@
 // src/components/CarForm.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, Pressable, KeyboardAvoidingView, Platform, Modal, FlatList, ActivityIndicator
+  View, Text, TextInput, ScrollView, Pressable, KeyboardAvoidingView, Platform, Modal, FlatList, ActivityIndicator, Alert
 } from 'react-native';
 import type { Car, CarSavePayload, Brand, Model, Agent, Terminal } from '../types';
 import { createClient } from '../api/client';
@@ -10,12 +10,20 @@ import { useAuth } from '../context/AuthContext';
 type Props = {
   initial?: Partial<Car>;
   onCancel: () => void;
-  onSubmit: (payload: CarSavePayload) => void | Promise<void>;
+  onSubmit: (payload: CarSavePayload & Record<string, any>) => void | Promise<void>;
   loading?: boolean;
 };
 
 const STATUS_OPTIONS = ['LOADED', 'WAREHOUSE', 'SHIPPED', 'ON HOLD'] as const;
 const AUCTION_OPTIONS = ['COPART', 'IAAI', 'MANHEIM'] as const;
+
+// destination option shape for picker (id = slug)
+type Dest = { id: string; slug: string; label: string };
+const DEFAULT_DESTS: Dest[] = [
+  { id: 'um-casr', slug: 'um-casr', label: 'Um-Casr' },
+  { id: 'al-aqaba', slug: 'al-aqaba', label: 'Al-Aqaba' },
+  { id: 'jabal-ali', slug: 'jabal-ali', label: 'Jabal-Ali' },
+];
 
 const TitleToggle = ({ value, onChange }: { value?: 0 | 1 | null; onChange: (v: 0 | 1) => void }) => (
   <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -57,7 +65,6 @@ const Chips = ({ options, value, onChange }:
 const Label = ({ children }: { children: React.ReactNode }) =>
   <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>{children}</Text>;
 
-
 const Input = (p: React.ComponentProps<typeof TextInput>) => (
   <TextInput
     {...p}
@@ -70,14 +77,8 @@ const Input = (p: React.ComponentProps<typeof TextInput>) => (
   />
 );
 
-// Helper to normalize mojibake text (e.g., UTF-8 misencoded as Latin-1)
-const normalizeText = (s?: string | null) => {
-  if (!s) return '';
-  // Heuristic: only convert if we see common mojibake markers
-  return /[ÃÂâ€]/.test(s) ? decodeURIComponent(escape(s)) : s;
-};
-
-function PickerModal<T extends { id: string; name?: string | null; username?: string | null }>(
+// NOTE: supports name OR label OR username, so we can reuse for Dest too
+function PickerModal<T extends { id: string; name?: string | null; label?: string | null; username?: string | null }>(
   { visible, onClose, data, onPick, title, loading }:
   { visible: boolean; onClose: () => void; data: T[]; onPick: (opt: T) => void; title: string; loading?: boolean }
 ) {
@@ -100,13 +101,17 @@ function PickerModal<T extends { id: string; name?: string | null; username?: st
             data={data}
             keyExtractor={(it) => it.id}
             ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#f1f5f9' }} />}
-            renderItem={({ item }) => (
-              <Pressable onPress={() => { onPick(item); onClose(); }} style={{ padding: 16 }}>
-                <Text style={{ fontSize: 16 }}>
-                  {normalizeText((item as any).name ?? (item as any).username ?? '')}
-                </Text>
-              </Pressable>
-            )}
+            renderItem={({ item }) => {
+              const label =
+                ((('name' in item ? (item as any).name : undefined) ??
+                  (item as any).label ??
+                  (item as any).username) ?? '').toString();
+              return (
+                <Pressable onPress={() => { onPick(item); onClose(); }} style={{ padding: 16 }}>
+                  <Text style={{ fontSize: 16 }}>{label}</Text>
+                </Pressable>
+              );
+            }}
           />
         )}
         <View style={{ padding: 12 }}>
@@ -155,11 +160,13 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
   const [models, setModels] = useState<Model[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [terms, setTerms] = useState<Terminal[]>([]);
+  const [dests, setDests] = useState<Dest[]>([]);
 
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [loadingTerms, setLoadingTerms] = useState(false);
+  const [loadingDests, setLoadingDests] = useState(false);
 
   const { token } = useAuth();
   const client = createClient(token);
@@ -182,12 +189,7 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
     try {
       setLoadingAgents(true);
       const r = await client.get<Agent[]>('/agents.php');
-      const rows = (r.data as any[]).map((a) => ({
-        id: String((a as any).id),
-        name: normalizeText((a as any).name ?? (a as any).username ?? ''),
-        username: (a as any).username ?? null,
-      }));
-      setAgents(rows as any);
+      setAgents(r.data);
     } catch (e: any) {
       console.log('agents load error', e?.response?.status, e?.response?.data || e?.message);
     } finally {
@@ -212,13 +214,9 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
     try {
       setLoadingModels(true);
       const r = await client.get<Model[]>('/models.php', { params: { brandId: brand } });
-      const rows = (r.data as any[]).map((m) => ({
-        ...m,
-        // unify possible keys from API: brandId / brandid / brand_id
-        brandId: (m as any).brandId ?? (m as any).brandid ?? (m as any).brand_id ?? null,
-      }));
-      const filtered = rows.filter((m: any) => m.brandId === brand);
-      setModels(filtered as any);
+      // client-side guard in case API returns all models
+      const filtered = Array.isArray(r.data) ? r.data.filter((m: any) => !m?.brandId || m?.brandId === brand) : [];
+      setModels(filtered);
     } catch (e: any) {
       console.log('models load error', e?.response?.status, e?.response?.data || e?.message);
       setModels([]);
@@ -227,16 +225,47 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
     }
   }
 
+  async function fetchDestinations() {
+    if (dests.length) return;
+    try {
+      setLoadingDests(true);
+      const r = await client.get('/destinations.php');
+      const arr: any[] = Array.isArray(r.data)
+        ? r.data
+        : Array.isArray((r as any)?.data?.items)
+          ? (r as any).data.items
+          : [];
+      const mapped: Dest[] = arr.map((it: any) => {
+        if (typeof it === 'string') {
+          const label = it;
+          const slug = label.toLowerCase().replace(/\s+/g, '-');
+          return { id: slug, slug, label };
+        }
+        const label = it?.label ?? it?.name ?? String(it ?? '');
+        const slug = (it?.slug ?? label.toLowerCase().replace(/\s+/g, '-')) as string;
+        return { id: slug, slug, label };
+      });
+      setDests(mapped.length ? mapped : DEFAULT_DESTS);
+    } catch (e: any) {
+      console.log('destinations load error', e?.response?.status, e?.response?.data || e?.message);
+      setDests(DEFAULT_DESTS);
+    } finally {
+      setLoadingDests(false);
+    }
+  }
+
   const [brandOpen, setBrandOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [termOpen, setTermOpen] = useState(false);
+  const [destOpen, setDestOpen] = useState(false);
 
   useEffect(() => {
-    // optional: warm caches in background
+    // optional: warm caches
     fetchBrands();
     fetchAgents();
     fetchTerms();
+    fetchDestinations();
   }, []);
 
   useEffect(() => {
@@ -245,13 +274,13 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
   }, [brandId]);
 
   function save() {
-    const payload: CarSavePayload = {
+    const payload: CarSavePayload & Record<string, any> = {
       id,
       // vehicle
       makingYear: makingYear ? Number(makingYear) : null,
       vin: vin || null,
       brandId: brandId ?? null,
-      modelid: modelid ?? null,
+      modelid: modelid ?? null, // DB snake (mobile API)
       color: color || null,
       lot: lot || null,
       carKey: carKey ?? 0,
@@ -259,8 +288,8 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
       issueDate: issueDate || null,
 
       // assignment
-      userid: userid || null,
-      terminalid: terminalid || null,
+      userid: userid || null,         // DB snake
+      terminalid: terminalid || null, // DB snake
 
       // logistics
       auctionType: auctionType ?? null,
@@ -271,6 +300,14 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
 
       note: note || null,
     };
+
+    // --- extra keys to satisfy the website controllers (camel) ---
+    payload.modelId = payload.modelid;
+    payload.userId = payload.userid;
+    payload.terminalId = payload.terminalid;
+    payload.car_key = carKey ?? 0; // controller expects car_key presence
+    // -------------------------------------------------------------
+
     onSubmit(payload);
   }
 
@@ -354,11 +391,9 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
             <Label>Agent</Label>
             <Pressable onPress={() => { setAgentOpen(true); fetchAgents(); }} style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 12 }}>
               <Text style={{ fontSize: 16 }}>
-                {normalizeText(
-                  agents.find(a => a.id === userid)?.name ??
-                  agents.find(a => a.id === userid)?.username ??
-                  (userid ? userid : 'Choose agent')
-                )}
+                {(agents.find(a => (a as any).id === userid)?.name ??
+                  agents.find(a => (a as any).id === userid)?.username ??
+                  (userid ? userid : 'Choose agent'))}
               </Text>
             </Pressable>
           </View>
@@ -366,7 +401,7 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
             <Label>Terminal</Label>
             <Pressable onPress={() => { setTermOpen(true); fetchTerms(); }} style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 12 }}>
               <Text style={{ fontSize: 16 }}>
-                {terms.find(t => t.id === terminalid)?.name || (terminalid ? terminalid : 'Choose terminal')}
+                {terms.find(t => (t as any).id === terminalid)?.name || (terminalid ? terminalid : 'Choose terminal')}
               </Text>
             </Pressable>
           </View>
@@ -379,7 +414,9 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
         <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' }}>
           <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
             <Label>Destination</Label>
-            <Input value={destination} onChangeText={setDestination} placeholder="e.g. Um-Casr" />
+            <Pressable onPress={() => { setDestOpen(true); fetchDestinations(); }} style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 12 }}>
+              <Text style={{ fontSize: 16 }}>{destination || 'Choose destination'}</Text>
+            </Pressable>
           </View>
           <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
             <Label>Status</Label>
@@ -421,7 +458,7 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
         title="Choose brand"
         data={brands}
         loading={loadingBrands}
-        onPick={(b) => { setBrandId(b.id); setBrandName(b.name || ''); setModelId(null); setModelName(null); }}
+        onPick={(b) => { setBrandId((b as any).id); setBrandName((b as any).name || ''); setModelId(null); setModelName(null); }}
         onClose={() => setBrandOpen(false)}
       />
       <PickerModal<Model>
@@ -429,15 +466,15 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
         title="Choose model"
         data={models}
         loading={loadingModels}
-        onPick={(m) => { setModelId(m.id); setModelName(m.name || ''); }}
+        onPick={(m) => { setModelId((m as any).id); setModelName((m as any).name || ''); }}
         onClose={() => setModelOpen(false)}
       />
-      <PickerModal<Agent>
+      <PickerModal<Agent & { name?: string | null }>
         visible={agentOpen}
         title="Choose agent"
-        data={agents}
+        data={agents as any}
         loading={loadingAgents}
-        onPick={(a) => setUserId(a.id)}
+        onPick={(a) => setUserId((a as any).id)}
         onClose={() => setAgentOpen(false)}
       />
       <PickerModal<Terminal>
@@ -445,8 +482,16 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
         title="Choose terminal"
         data={terms}
         loading={loadingTerms}
-        onPick={(t) => setTerminalId(t.id)}
+        onPick={(t) => setTerminalId((t as any).id)}
         onClose={() => setTermOpen(false)}
+      />
+      <PickerModal<Dest>
+        visible={destOpen}
+        title="Choose destination"
+        data={dests}
+        loading={loadingDests}
+        onPick={(d) => setDestination(d.label)}
+        onClose={() => setDestOpen(false)}
       />
     </KeyboardAvoidingView>
   );

@@ -70,3 +70,19 @@ export type Model = { id: string; name: string; brandId?: string | null };
 export type Agent = { id: string; name: string; username?: string | null };
 
 export type Terminal = { id: string; name: string };
+
+// User used by AuthContext
+export type Role = 'ADMIN' | 'AGENT' | 'USER';
+
+export type User = {
+  id: string | number;
+  email?: string | null;
+  name?: string | null;
+  username?: string | null;
+
+  // New API
+  role?: Role | null;
+
+  // Legacy API (some endpoints send `type`)
+  type?: Role | null;
+};
