@@ -20,7 +20,10 @@ const THEME = {
   subText: '#6B7280',
   border: '#E5E7EB',
   accent: '#2e6dd8',
-  grayBg: '#F3F4F6',
+  grayBg: '#FAB12F',
+  danger: '#EF4444',
+  color: '#FA812F',
+  eta: '#B4E50D'
 };
 
 // Cache agent names loaded from /agents.php to avoid per-card requests
@@ -33,19 +36,17 @@ const STATUS_STYLES: Record<string, { bg: string; text: string }> = {
   WAREHOUSE: { bg: '#F3F4F6', text: '#111827' },
   COMPLETED: { bg: '#E1FCEF', text: '#065F46' },
   NEED_TRACKING: { bg: '#FEF3C7', text: '#92400E' },
+  SHIPPED: { bg: '#E0EAFF', text: '#1D4ED8' },
+  'ON HOLD': { bg: '#FEE2E2', text: '#B91C1C' },
 };
 const getStatusStyle = (s?: string | null) =>
   s ? (STATUS_STYLES[String(s).toUpperCase()] ?? { bg: THEME.grayBg, text: THEME.subText }) : { bg: THEME.grayBg, text: THEME.subText };
 
-/** Conservative UTF-8 “un-mojibake” fixer.
- * Tries classic Latin-1→UTF-8 repair and a byte-wise percent decode.
- * Keeps a candidate only if it increases Arabic letter count and has no �.
- */
+/** Conservative UTF-8 “un-mojibake” fixer. */
 function demojibake(value: unknown): string {
   const s = (value ?? '').toString().trim();
   if (!s) return '';
 
-  const hasArabic = /[\u0600-\u06FF]/.test(s);
   const hasMarkers = /[ÃÂØÙÐ×¢«»ß�]/.test(s);
   if (!hasMarkers) return s;
 
@@ -86,12 +87,27 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
   const { token } = useAuth();
   const client = useMemo(() => createClient(token), [token]);
 
-  const title =
-    [demojibake((car as any).model ?? (car as any).make ?? ''), (car as any).year ?? (car as any).makingYear ?? '']
-      .filter(Boolean)
-      .join(' — ') || 'Vehicle';
+  // --- DATA PICKING & NORMALIZATION
+  const brand = demojibake(
+    (car as any).brand ??
+    (car as any).brandName ??
+    (car as any).brand_name ??
+    (car as any).make ??
+    ''
+  );
 
-  // Try several common fields coming from different APIs, then fix.
+  const model = demojibake(
+    (car as any).model ??
+    (car as any).modelName ??
+    (car as any).model_name ??
+    ''
+  );
+
+  const year = (car as any).year ?? (car as any).makingYear ?? '';
+
+  const title = [model, year].filter(Boolean).join(' · ') || 'Vehicle';
+
+  // agent (with fallback fix via agents.php, cached)
   const agentRaw =
     (car as any).agent_name ??
     (car as any).agentName ??
@@ -100,16 +116,14 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
     (car as any).name ??
     (car as any).agent_username ??
     '';
-  const agent = demojibake(agentRaw);
 
-  // If the agent text looks mojibake and we have an id, try to resolve it via /agents.php (once, cached)
+  const agent = demojibake(agentRaw);
   const agentId =
     (car as any).userid ??
     (car as any).userId ??
     (car as any).agent_id ??
     (car as any).agentId ??
     null;
-
   const [agentFixed, setAgentFixed] = useState<string | null>(null);
 
   useEffect(() => {
@@ -145,6 +159,9 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
   const statusStyle = useMemo(() => getStatusStyle((car as any).status), [(car as any).status]);
   const [copied, setCopied] = useState(false);
   const destination = demojibake((car as any).destination ?? '');
+  const lot = (car as any).lot ? String((car as any).lot) : '';
+  const color = (car as any).color ? String((car as any).color) : '';
+  const auctionType = (car as any).auctionType ? String((car as any).auctionType) : '';
 
   async function copyVIN() {
     const text = ((car as any).vin ?? '').toString().trim();
@@ -156,21 +173,24 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
     } catch {}
   }
 
+  // --- UI
   return (
     <View style={styles.card}>
+      {/* HERO IMAGE */}
       <Pressable
         onPress={() => onGallery?.((car as any).id)}
-        style={styles.thumbWrap}
+        style={styles.hero}
         accessibilityRole="imagebutton"
         accessibilityLabel="Open gallery"
       >
         <Image
           source={(car as any).image ? { uri: (car as any).image } : undefined}
-          style={styles.thumb}
+          style={styles.heroImage}
           contentFit="cover"
           cachePolicy="memory-disk"
           transition={200}
         />
+        {/* status badge */}
         {(car as any).status ? (
           <View style={[styles.badge, { backgroundColor: statusStyle.bg }]}>
             <Text style={[styles.badgeText, { color: statusStyle.text }]} numberOfLines={1}>
@@ -178,28 +198,47 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
             </Text>
           </View>
         ) : null}
-        <View style={styles.overlayLabel}>
-          <Text style={styles.overlayLabelText}>Gallery</Text>
-        </View>
-      </Pressable>
 
-      <View style={styles.meta}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
-
+        {/* VIN bar */}
         {(car as any).vin ? (
-          <View style={styles.vinRow}>
-            <Text style={styles.vinLabel}>VIN:</Text>
-            {/* Copy when tapping VIN text */}
-            <Text style={styles.vin} numberOfLines={1} onPress={copyVIN}>
-              {(car as any).vin}
+          <View style={styles.heroBar}>
+            <Text style={styles.heroBarText} numberOfLines={1}>
+              VIN: <Text onPress={copyVIN} style={styles.heroBarVin} numberOfLines={1}>{(car as any).vin}</Text>
             </Text>
-            {/* Primary copy button */}
-            <Pressable onPress={copyVIN} hitSlop={12} style={styles.copyPill} accessibilityRole="button" accessibilityLabel="Copy VIN">
-              <Text style={styles.copyPillText}>{copied ? 'Copied' : 'Copy'}</Text>
+            <Pressable onPress={copyVIN} hitSlop={12} style={styles.heroCopyBtn}>
+              <Text style={styles.heroCopyBtnText}>{copied ? 'Copied' : 'Copy'}</Text>
             </Pressable>
           </View>
         ) : null}
+      </Pressable>
 
+      {/* BODY */}
+      <View style={styles.body}>
+        {/* BRAND */}
+        {brand ? (
+          <Text
+            style={[
+              styles.brand,
+              isArabic(brand) && { textAlign: 'right', writingDirection: 'rtl' },
+            ]}
+            numberOfLines={1}
+          >
+            {brand}
+          </Text>
+        ) : null}
+
+        {/* TITLE (model · year) */}
+        <Text
+          style={[
+            styles.title,
+            isArabic(title) && { textAlign: 'right', writingDirection: 'rtl' },
+          ]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+
+        {/* INFO PILLS */}
         <View style={styles.pillRow}>
           {(car as any).destination ? (
             <View style={styles.pill}>
@@ -208,6 +247,7 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
                   styles.pillText,
                   isArabic(destination) && { writingDirection: 'rtl', textAlign: 'right' },
                 ]}
+                numberOfLines={1}
               >
                 {destination}
               </Text>
@@ -219,24 +259,38 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
           {(car as any).eta ? (
             <View style={styles.pill}><Text style={styles.pillText}>ETA {(car as any).eta}</Text></View>
           ) : null}
+          {lot ? (
+            <View style={styles.pill}><Text style={styles.pillText}>Lot {lot}</Text></View>
+          ) : null}
+          {color ? (
+            <View style={styles.pill}><Text style={styles.pillText}>{color}</Text></View>
+          ) : null}
+          {auctionType ? (
+            <View style={styles.pill}><Text style={styles.pillText}>{auctionType}</Text></View>
+          ) : null}
         </View>
 
+        {/* AGENT */}
         {(agentFixed || agent) ? (
           <Text
-            style={[styles.agent, isArabic(agentFixed || agent) && { textAlign: 'right', writingDirection: 'rtl' }]}
+            style={[
+              styles.agent,
+              isArabic(agentFixed || agent) && { textAlign: 'right', writingDirection: 'rtl' },
+            ]}
             numberOfLines={1}
           >
-            <Text style={styles.agentLabel}>Agent: </Text>{agentFixed || agent}
+            <Text style={styles.agentLabel}></Text>{agentFixed || agent}
           </Text>
         ) : null}
 
+        {/* ACTIONS */}
         <View style={styles.actions}>
-          <Pressable onPress={() => onGallery?.((car as any).id)}>
-            <Text style={styles.link}>View gallery</Text>
+          <Pressable onPress={() => onGallery?.((car as any).id)} style={[styles.cta, styles.ctaPrimary]}>
+            <Text style={styles.ctaPrimaryText}>View gallery</Text>
           </Pressable>
           {onEdit ? (
-            <Pressable onPress={() => onEdit(car)} style={{ marginLeft: 16 }}>
-              <Text style={styles.link}>Edit</Text>
+            <Pressable onPress={() => onEdit(car)} style={[styles.cta, styles.ctaGhost]}>
+              <Text style={styles.ctaGhostText}>Edit</Text>
             </Pressable>
           ) : null}
         </View>
@@ -253,39 +307,62 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    padding: 12,
     backgroundColor: THEME.cardBg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: THEME.border,
-  },
-  thumbWrap: {
-    width: 110,
-    height: 90,
-    borderRadius: 10,
+    borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: THEME.grayBg,
-    marginRight: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    // subtle shadow
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  thumb: { width: '100%', height: '100%', backgroundColor: THEME.grayBg },
-  badge: { position: 'absolute', top: 8, left: 8, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+
+  // HERO
+  hero: { width: '100%', height: 250, backgroundColor: THEME.grayBg, position: 'relative' },
+  heroImage: { width: '100%', height: '100%', backgroundColor: THEME.grayBg },
+  badge: { position: 'absolute', top: 10, left: 10, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
-  overlayLabel: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 4, alignItems: 'center' },
-  overlayLabelText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  meta: { flex: 1, justifyContent: 'center' },
-  title: { fontSize: 16, fontWeight: '800', color: THEME.text, marginBottom: 6 },
-  vinRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  vinLabel: { color: THEME.subText, fontWeight: '700' },
-  vin: { color: THEME.text, flexShrink: 1 },
-  copyPill: { marginLeft: 'auto', backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  copyPillText: { color: THEME.accent, fontWeight: '700', fontSize: 12 },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
+  heroBar: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroBarText: { color: '#fff', fontSize: 12, flex: 1 },
+  heroBarVin: { color: '#fff', fontWeight: '800' },
+  heroCopyBtn: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#ffffff', borderRadius: 999 },
+  heroCopyBtnText: { color: THEME.color, fontWeight: '800', fontSize: 12 },
+
+  // BODY
+  body: { padding: 12 },
+
+  brand: { fontSize: 13, fontWeight: '800', color: THEME.color, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  title: { fontSize: 18, fontWeight: '800', color: THEME.text, marginBottom: 10 },
+
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   pill: { backgroundColor: THEME.grayBg, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   pillText: { color: THEME.text, fontSize: 12, fontWeight: '600', writingDirection: 'auto' },
-  agent: { color: THEME.subText, writingDirection: 'auto' },
+
+  agent: { color: THEME.text, writingDirection: 'auto' },
   agentLabel: { fontWeight: '700', color: THEME.subText },
-  actions: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  link: { color: THEME.accent, fontWeight: '700' },
+
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+
+  cta: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
+  ctaPrimary: { backgroundColor: THEME.color },
+  ctaPrimaryText: { color: '#fff', fontWeight: '800' },
+  ctaGhost: { backgroundColor: '#EEF2FF' },
+  ctaGhostText: { color: THEME.accent, fontWeight: '800' },
+
   toast: { position: 'absolute', right: 12, top: 12, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   toastText: { color: '#fff', fontSize: 11, fontWeight: '600' },
 });
