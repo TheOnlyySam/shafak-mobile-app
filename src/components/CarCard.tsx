@@ -11,6 +11,10 @@ type Props = {
   car: Car;
   onGallery?: (carId: string) => void;
   onEdit?: (car: Car) => void;
+  onShip?: (car: Car) => void;
+  onAddShipping?: (car: Car) => void;
+  onDelete?: (car: Car) => void;
+  isAdmin?: boolean; // show admin-only actions
 };
 
 const THEME = {
@@ -83,7 +87,7 @@ function demojibake(value: unknown): string {
 const looksMojibake = (t: string) => /[ÃÂØÙÐ×¢«»ß�]/.test(t) && !/[\u0600-\u06FF]/.test(t);
 const isArabic = (t: string) => /[\u0600-\u06FF]/.test(t);
 
-export default function CarCard({ car, onGallery, onEdit }: Props) {
+export default function CarCard({ car, onGallery, onEdit, onShip, onAddShipping, onDelete, isAdmin }: Props) {
   const { token } = useAuth();
   const client = useMemo(() => createClient(token), [token]);
 
@@ -285,12 +289,32 @@ export default function CarCard({ car, onGallery, onEdit }: Props) {
 
         {/* ACTIONS */}
         <View style={styles.actions}>
-          <Pressable onPress={() => onGallery?.((car as any).id)} style={[styles.cta, styles.ctaPrimary]}>
-            <Text style={styles.ctaPrimaryText}>View gallery</Text>
+          <Pressable onPress={() => onGallery?.((car as any).id)} style={[styles.cta, styles.ctaGhost]}>
+            <Text style={styles.ctaGhostText}>View gallery</Text>
           </Pressable>
+
+          {/* Admin-only actions */}
+          {isAdmin && onShip ? (
+            <Pressable onPress={() => onShip(car)} style={[styles.cta, styles.ctaPrimary]}>
+              <Text style={styles.ctaPrimaryText}>Ship</Text>
+            </Pressable>
+          ) : null}
+
           {onEdit ? (
-            <Pressable onPress={() => onEdit(car)} style={[styles.cta, styles.ctaGhost]}>
-              <Text style={styles.ctaGhostText}>Edit</Text>
+            <Pressable onPress={() => onEdit(car)} style={[styles.cta, styles.ctaSecondary]}>
+              <Text style={styles.ctaSecondaryText}>Edit</Text>
+            </Pressable>
+          ) : null}
+
+          {isAdmin && onAddShipping ? (
+            <Pressable onPress={() => onAddShipping(car)} style={[styles.cta, styles.ctaSecondary]}>
+              <Text style={styles.ctaSecondaryText}>Add Shipping Photos</Text>
+            </Pressable>
+          ) : null}
+
+          {isAdmin && onDelete ? (
+            <Pressable onPress={() => onDelete(car)} style={[styles.cta, styles.ctaDanger]}>
+              <Text style={styles.ctaDangerText}>Delete</Text>
             </Pressable>
           ) : null}
         </View>
@@ -355,13 +379,17 @@ const styles = StyleSheet.create({
   agent: { color: THEME.text, writingDirection: 'auto' },
   agentLabel: { fontWeight: '700', color: THEME.subText },
 
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 12 },
 
   cta: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
   ctaPrimary: { backgroundColor: THEME.color },
   ctaPrimaryText: { color: '#fff', fontWeight: '800' },
-  ctaGhost: { backgroundColor: '#EEF2FF' },
-  ctaGhostText: { color: THEME.accent, fontWeight: '800' },
+  ctaSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: THEME.color },
+  ctaSecondaryText: { color: THEME.color, fontWeight: '800' },
+  ctaDanger: { backgroundColor: '#fff', borderWidth: 1, borderColor: THEME.danger },
+  ctaDangerText: { color: THEME.danger, fontWeight: '800' },
+  ctaGhost: { backgroundColor: THEME.color },
+  ctaGhostText: { color: '#fff', fontWeight: '800' },
 
   toast: { position: 'absolute', right: 12, top: 12, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   toastText: { color: '#fff', fontSize: 11, fontWeight: '600' },

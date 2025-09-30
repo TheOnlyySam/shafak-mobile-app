@@ -156,6 +156,10 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
   const [imageUri, setImageUri] = useState<string | null>(initialImage);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // recently added shipping thumbs (this session only)
+  const [shippingThumbs, setShippingThumbs] = useState<string[]>([]);
+  const [uploadingShipping, setUploadingShipping] = useState(false);
+
   // ---- state (vehicle)
   const [makingYear, setYear] = useState(String(initial?.makingYear ?? initial?.year ?? ''));
   const [vin, setVin] = useState(initial?.vin ?? '');
@@ -392,6 +396,65 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
     }
   }
 
+  // Add shipping photos and link to this car
+  async function addShippingPhotos() {
+    if (!id) {
+      Alert.alert('Save car first', 'You can upload shipping photos after creating the car.');
+      return;
+    }
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow photo library access to choose photos.');
+        return;
+      }
+
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true as any,   // iOS 14+ supports this; other platforms will ignore
+        selectionLimit: 0 as any,               // 0 = unlimited on supported platforms
+        quality: 0.85,
+      });
+
+      const assets = (res as any)?.canceled ? [] : ((res as any)?.assets ?? []);
+      if (!assets.length) return;
+
+      setUploadingShipping(true);
+      const newThumbs: string[] = [];
+
+      for (const a of assets) {
+        const uri = (a as any)?.uri;
+        if (!uri) continue;
+
+        // 1) upload the image file to server
+        const up = await uploadImageIfNeeded(uri); // returns { url, file }
+        if (!up?.url) continue;
+
+        // 2) register it as a SHIPPING image for this car
+        try {
+          await client.post('/car_image_set.php', {
+            carId: id,
+            image: up.file || up.url,     // server accepts bare filename OR full URL
+            type: 'SHIPPING',
+          });
+          newThumbs.push(up.url);
+        } catch (e: any) {
+          console.log('attach shipping image error', e?.response?.status, e?.response?.data || e?.message);
+        }
+      }
+
+      if (newThumbs.length) {
+        // show newest first
+        setShippingThumbs(prev => [...newThumbs, ...prev]);
+        Alert.alert('Done', `${newThumbs.length} shipping photo(s) added.`);
+      }
+    } catch (e) {
+      console.log('addShippingPhotos error', e);
+    } finally {
+      setUploadingShipping(false);
+    }
+  }
+
   async function save() {
     // Upload the image if needed (local file URI -> remote URL + filename)
     let uploaded: { url: string; file: string } | null = null;
@@ -528,6 +591,46 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
             </View>
 
             {uploadingImage ? <Text style={{ color: '#6b7280', marginTop: 6 }}>Uploading…</Text> : null}
+          </View>
+
+          {/* shipping photos */}
+          <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+            <Label>Shipping Photos</Label>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 }}>
+              <Pressable
+                onPress={addShippingPhotos}
+                disabled={!id || uploadingShipping}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: '#e5e7eb',
+                  backgroundColor: (!id || uploadingShipping) ? '#f3f4f6' : '#fff',
+                  opacity: (!id || uploadingShipping) ? 0.6 : 1
+                }}
+              >
+                <Text style={{ fontWeight: '700', color: '#1f2937' }}>
+                  {(!id) ? 'Save car first' : (uploadingShipping ? 'Uploading…' : 'Add shipping photos')}
+                </Text>
+              </Pressable>
+            </View>
+
+            {shippingThumbs.length ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 10 }}
+                contentContainerStyle={{ paddingRight: 6 }}
+              >
+                {shippingThumbs.map((u, i) => (
+                  <View key={u + i} style={{ width: 88, height: 66, borderRadius: 10, overflow: 'hidden', backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', marginRight: 8 }}>
+                    <Image source={{ uri: u }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                  </View>
+                ))}
+              </ScrollView>
+            ) : null}
           </View>
 
           {/* brand picker */}
