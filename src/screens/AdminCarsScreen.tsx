@@ -1,7 +1,7 @@
 // src/screens/AdminCarsScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, FlatList, Modal, RefreshControl, Alert, Pressable,
+  View, Text, TextInput, FlatList, Modal, RefreshControl, Alert, Pressable,
   ActivityIndicator, Dimensions, SafeAreaView, StatusBar, StyleSheet
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -24,6 +24,7 @@ const THEME = {
   muted: '#9CA3AF',
   overlay: 'rgba(0,0,0,0.6)',
 };
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.bg },
@@ -104,6 +105,21 @@ const styles = StyleSheet.create({
   },
   galleryCount: { color: '#fff', opacity: 0.9, fontSize: 13 },
   galleryClose: { color: '#fff', fontWeight: '600' },
+  filters: { padding: 12, gap: 10, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: THEME.border },
+  row: { flexDirection: 'row', gap: 8 },
+  input: {
+    flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff'
+  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterChip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+    borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff'
+  },
+  filterChipActive: { borderColor: '#FA812F', backgroundColor: '#FFF4EC' },
+  filterChipText: { fontWeight: '700', color: '#374151' },
+  filterChipTextActive: { color: '#FA812F' },
+  empty: { color: '#6B7280', textAlign: 'center', marginTop: 16 },
 });
 
 export default function AdminCarsScreen() {
@@ -124,6 +140,9 @@ export default function AdminCarsScreen() {
 
   const [error, setError] = useState<string | null>(null);
 
+  // --- filters (client-only) ---
+  const [q, setQ] = useState('');
+
   async function load() {
     setRefreshing(true);
     setError(null);
@@ -138,6 +157,19 @@ export default function AdminCarsScreen() {
     }
   }
   useEffect(() => { load(); }, []);
+
+  const filteredCars = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    if (!ql) return cars;
+    return cars.filter((c) => {
+      const it: any = c;
+      const hay = [
+        it.vin, it.lot, it.containerNumber, it.destination,
+        it.make, it.model, it.terminalState, it.agent_name, it.agent_username, it.id
+      ].map((x: any) => (x ?? '').toString().toLowerCase()).join(' ');
+      return hay.includes(ql);
+    });
+  }, [cars, q]);
 
   function openShip(car: Car) {
     // Prefill SHIPPED while keeping ETA / containerNumber / everything else from DB
@@ -283,14 +315,31 @@ export default function AdminCarsScreen() {
         </View>
       </View>
 
+      {/* Filters */}
+      <View style={styles.filters}>
+        {/* Search */}
+        <View style={styles.row}>
+          <TextInput
+            style={styles.input}
+            placeholder="Search VIN, LOT, Container, Destination, Model…"
+            placeholderTextColor="#9CA3AF"
+            value={q}
+            onChangeText={setQ}
+            autoCorrect={false}
+            autoCapitalize="none"
+            clearButtonMode="while-editing"
+          />
+        </View>
+      </View>
+
       {error ? (
         <Text style={{ color: '#dc2626', textAlign: 'center', marginTop: 24 }}>{error}</Text>
-      ) : !refreshing && cars.length === 0 ? (
-        <Text style={{ color: THEME.subText, textAlign: 'center', marginTop: 24 }}>No cars found.</Text>
+      ) : !refreshing && filteredCars.length === 0 ? (
+        <Text style={styles.empty}>No matching cars.</Text>
       ) : null}
 
       <FlatList
-        data={cars}
+        data={filteredCars}
         keyExtractor={(it) => String(it.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={THEME.accent} colors={[THEME.accent]} />}
         renderItem={({ item }) => (

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, FlatList, RefreshControl, Modal, Pressable, Text, ActivityIndicator, Dimensions, SafeAreaView, StyleSheet, StatusBar } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, FlatList, RefreshControl, Modal, Pressable, Text, ActivityIndicator, Dimensions, SafeAreaView, StyleSheet, StatusBar, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { createClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +32,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: THEME.text },
+  searchWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: THEME.cardBg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: THEME.border,
+  },
+  searchInput: {
+    height: 40,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+  },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -66,6 +81,7 @@ export default function AgentCarsScreen() {
   const [loadingGallery, setLoadingGallery] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   async function load() {
     setRefreshing(true);
@@ -104,6 +120,29 @@ export default function AgentCarsScreen() {
     load();
   }, []);
 
+  const filteredCars = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return cars;
+    return cars.filter((it) => {
+      const hay = [
+        it.vin,
+        it.lot,
+        it.containerNumber,
+        it.destination,
+        (it as any).model,
+        (it as any).make,
+        (it as any).status,
+        (it as any).terminalState,
+        (it as any).terminalStateCode,
+        it.eta,
+        it.color,
+      ]
+        .map((x) => (x ?? '').toString().toLowerCase())
+        .join(' ');
+      return hay.includes(q);
+    });
+  }, [cars, query]);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -114,14 +153,27 @@ export default function AgentCarsScreen() {
         </Pressable>
       </View>
 
+      <View style={styles.searchWrap}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search VIN, lot, model, container…"
+          placeholderTextColor={THEME.muted}
+          style={styles.searchInput}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+      </View>
+
       {error ? (
         <Text style={{ color: '#dc2626', textAlign: 'center', marginTop: 24 }}>{error}</Text>
-      ) : !refreshing && cars.length === 0 ? (
+      ) : !refreshing && filteredCars.length === 0 ? (
         <Text style={{ color: THEME.subText, textAlign: 'center', marginTop: 24 }}>No cars found for your account.</Text>
       ) : null}
 
       <FlatList
-        data={cars}
+        data={filteredCars}
         keyExtractor={(it) => String(it.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={THEME.accent} colors={[THEME.accent]} />}
         renderItem={({ item }) => <CarCard car={item} onGallery={openGallery} />}
