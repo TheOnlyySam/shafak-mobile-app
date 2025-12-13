@@ -32,7 +32,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: THEME.text },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: THEME.text },
+  headerSubtitle: {
+    fontSize: 13,
+    color: THEME.subText,
+    marginTop: 2,
+  },
   searchWrap: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -92,6 +97,20 @@ export default function AgentCarsScreen() {
     | 'SHIPPING'
     | undefined;
 
+  const screenMeta = (() => {
+    switch (filterType) {
+      case 'NEW':
+        return { title: 'New Cars', subtitle: 'Recently added vehicles' };
+      case 'WAREHOUSE':
+        return { title: 'Warehouse', subtitle: 'Cars in warehouse stage' };
+      case 'SHIPPING':
+        return { title: 'Shipping', subtitle: 'Cars currently being shipped' };
+      case 'ALL':
+      default:
+        return { title: 'All Cars', subtitle: 'Your assigned vehicles' };
+    }
+  })();
+
   async function load() {
     setRefreshing(true);
     setError(null);
@@ -132,17 +151,29 @@ export default function AgentCarsScreen() {
   const filteredCars = useMemo(() => {
     let base = cars;
 
-    // ---- STATUS-BASED LIFECYCLE ----
+    // ---- DATE-BASED LIFECYCLE (STATUS IGNORED COMPLETELY) ----
     if (filterType === 'NEW') {
-      base = cars.filter(c => !c.status || c.status === 'NEW');
+      base = cars.filter(
+        c =>
+          !!c.purchaseDate &&
+          !c.warehouseDate &&
+          !c.containerNumber
+      );
     }
 
     if (filterType === 'WAREHOUSE') {
-      base = cars.filter(c => c.status === 'WAREHOUSE');
+      base = cars.filter(
+        c =>
+          !!c.warehouseDate &&
+          !c.containerNumber
+      );
     }
 
     if (filterType === 'SHIPPING') {
-      base = cars.filter(c => c.status === 'LOADED');
+      base = cars.filter(
+        c =>
+          !!c.containerNumber
+      );
     }
 
     // ---- SEARCH (on top of lifecycle) ----
@@ -171,10 +202,10 @@ export default function AgentCarsScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>All Cars</Text>
-        <Pressable onPress={logout} style={styles.chip}>
-          <Text style={styles.chipText}>Sign Out</Text>
-        </Pressable>
+        <View>
+          <Text style={styles.headerTitle}>{screenMeta.title}</Text>
+          <Text style={styles.headerSubtitle}>{screenMeta.subtitle}</Text>
+        </View>
       </View>
 
       <View style={styles.searchWrap}>
@@ -200,7 +231,28 @@ export default function AgentCarsScreen() {
         data={filteredCars}
         keyExtractor={(it) => String(it.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={THEME.accent} colors={[THEME.accent]} />}
-        renderItem={({ item }) => <CarCard car={item} onGallery={openGallery} />}
+        renderItem={({ item }) => (
+          <View
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: 14,
+
+              // 🔒 Clip any child elevation / ripple (Android fix)
+              overflow: 'hidden',
+
+              // iOS shadow only
+              shadowColor: '#000',
+              shadowOpacity: 0.08,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 4 },
+
+              // Android: no elevation
+              elevation: 0,
+            }}
+          >
+            <CarCard car={item} onGallery={openGallery} />
+          </View>
+        )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={styles.listContent}
       />

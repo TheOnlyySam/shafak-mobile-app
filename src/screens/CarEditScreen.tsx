@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { createClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -141,8 +141,25 @@ export default function CarEditScreen() {
         <TextInput value={note} onChangeText={setNote} style={[ti, { height: 90 }]} multiline />
       </Field>
 
-      <Pressable onPress={save} disabled={loading}
-        style={{ backgroundColor: '#2e6dd8', padding: 14, borderRadius: 8, opacity: loading ? 0.6 : 1 }}>
+      <Pressable
+        onPress={save}
+        disabled={loading}
+        style={{
+          backgroundColor: '#2e6dd8',
+          padding: 14,
+          borderRadius: 8,
+          opacity: loading ? 0.6 : 1,
+
+          // iOS only shadow (very subtle)
+          shadowColor: '#000',
+          shadowOpacity: Platform.OS === 'ios' ? 0.08 : 0,
+          shadowRadius: Platform.OS === 'ios' ? 8 : 0,
+          shadowOffset: Platform.OS === 'ios' ? { width: 0, height: 4 } : { width: 0, height: 0 },
+
+          // Android: force no elevation
+          elevation: 0,
+        }}
+      >
         <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
           {loading ? 'Saving…' : 'Save'}
         </Text>

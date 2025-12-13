@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useUnreadNotifications } from '../hooks/useUnreadNotifications';
 
 import CarsHomeScreen from '../screens/CarsHomeScreen';
 import AdminCarsScreen from '../screens/AdminCarsScreen';
@@ -15,6 +16,8 @@ export default function AppTabs() {
   const { user } = useAuth();
   const role = String(user?.role || '').toUpperCase();
   const isAdmin = role === 'ADMIN' || role === 'SUPER';
+  const { count: unreadCount } = useUnreadNotifications();
+console.log('🔔 unreadCount:', unreadCount);
 
   return (
     <Tab.Navigator
@@ -58,7 +61,16 @@ export default function AppTabs() {
       <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
-        options={{ title: 'Notifications' }}
+        options={{
+          title: 'Notifications',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            fontSize: 11,
+            fontWeight: '700',
+          },
+        }}
       />
 
       <Tab.Screen

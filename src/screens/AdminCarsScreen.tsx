@@ -34,8 +34,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: THEME.border,
     backgroundColor: THEME.cardBg,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+  },
+  card: {
+    borderRadius: 20,
+    padding: 22,
+    minHeight: 130,
+    backgroundColor: '#fff',
+
+    // iOS shadow only
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+
+    // Android: no shadow
+    elevation: 0,
   },
   headerTitle: { fontSize: 20, fontWeight: '800', color: THEME.text, textAlign: 'center' },
   chip: {
@@ -139,6 +155,15 @@ export default function AdminCarsScreen() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Car | null>(null);
+  useEffect(() => {
+    if (route.params?.openForm) {
+      setEditing(null);
+      setModalOpen(true);
+
+      // clear param so back navigation behaves correctly
+      route.params.openForm = false;
+    }
+  }, [route.params]);
   const [saving, setSaving] = useState(false);
 
   // --- gallery state (same as Agent) ---
@@ -169,18 +194,21 @@ export default function AdminCarsScreen() {
   const filteredCars = useMemo(() => {
     let base = cars;
 
+    // NEW: purchaseDate exists ONLY
     if (filterType === 'NEW') {
       base = cars.filter(
-        c => !c.warehouseDate && !c.containerNumber
+        c => !!c.purchaseDate && !c.warehouseDate && !c.containerNumber
       );
     }
 
+    // WAREHOUSE: warehouseDate exists ONLY
     if (filterType === 'WAREHOUSE') {
       base = cars.filter(
         c => !!c.warehouseDate && !c.containerNumber
       );
     }
 
+    // SHIPPING: containerNumber exists
     if (filterType === 'SHIPPING') {
       base = cars.filter(
         c => !!c.containerNumber
@@ -339,18 +367,44 @@ export default function AdminCarsScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Admin</Text>
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => { setEditing(null); setModalOpen(true); }}
-            style={styles.addBtn}
+        <View>
+          <Text style={styles.headerTitle}>
+            {filterType === 'NEW'
+              ? 'New Cars'
+              : filterType === 'WAREHOUSE'
+              ? 'Warehouse'
+              : filterType === 'SHIPPING'
+              ? 'Shipping'
+              : 'All Cars'}
+          </Text>
+
+          <Text
+            style={{
+              color: THEME.subText,
+              marginTop: 2,
+              fontSize: 12,
+              fontWeight: '500',
+            }}
           >
-            <Text style={styles.addBtnText}>Add Car</Text>
-          </Pressable>
-          <Pressable onPress={logout} style={styles.signOutBtn}>
-            <Text style={styles.signOutBtnText}>Sign Out</Text>
-          </Pressable>
+            {filterType === 'NEW'
+              ? 'Recently added'
+              : filterType === 'WAREHOUSE'
+              ? 'In warehouse'
+              : filterType === 'SHIPPING'
+              ? 'Ready for shipping'
+              : 'All vehicles'}
+          </Text>
         </View>
+
+        <Pressable
+          onPress={() => {
+            setEditing(null);
+            setModalOpen(true);
+          }}
+          style={styles.addBtn}
+        >
+          <Text style={styles.addBtnText}>Add Car</Text>
+        </Pressable>
       </View>
 
       {/* Filters */}
@@ -455,4 +509,5 @@ export default function AdminCarsScreen() {
       </Modal>
     </SafeAreaView>
   );
+
 }

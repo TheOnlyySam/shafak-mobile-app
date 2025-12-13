@@ -12,6 +12,7 @@ export type Car = {
   eta?: string | null;                // YYYY-MM-DD
   containerNumber?: string | null;
   warehouseDate?: string | null;     // YYYY-MM-DD
+  purchaseDate?: string | null;      // YYYY-MM-DD
   destination?: string | null;
   terminal?: string | null;           // terminal *name*
   agent_id?: string | null;
@@ -93,16 +94,11 @@ export type User = {
 // =====================
 export type AppNotificationType = 'GENERAL' | 'CAR_STATUS';
 
-export type AppNotification = {
-  id: string | number;
-
-  type: AppNotificationType;
+type AppNotification = {
+  id: number;
   title: string;
   body: string;
-
-  carId?: string | number | null;
-  statusFrom?: string | null;
-  statusTo?: string | null;
-
+  audience: 'ALL' | 'AGENT';
+  agentId?: string | null;
   createdAt: string;
 };

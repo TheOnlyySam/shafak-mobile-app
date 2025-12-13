@@ -6,6 +6,7 @@ import LoginScreen from '../screens/LoginScreen';
 import AdminCarsScreen from '../screens/AdminCarsScreen';
 import AgentCarsScreen from '../screens/AgentCarsScreen';
 import AppTabs from './AppTabs';
+import AdminSendNotificationScreen from '../screens/AdminSendNotificationScreen';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -14,6 +15,7 @@ type RootStackParamList = {
   CarsHome: undefined;
   AdminCars: undefined;
   AgentCars: undefined;
+  SendNotification: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -54,6 +56,13 @@ export default function RootNavigation() {
                 name="AgentCars"
                 component={AgentCarsScreen}
                 options={{ title: 'My Cars' }}
+              />
+            )}
+            {isAdmin && (
+              <Stack.Screen
+                name="SendNotification"
+                component={AdminSendNotificationScreen}
+                options={{ title: 'Send Notification' }}
               />
             )}
           </>
