@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '../types';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -48,18 +49,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
 
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem('auth_token');
+        const storedUser = await AsyncStorage.getItem('auth_user');
+        if (storedToken && storedUser) {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (e) {
+        console.error('Failed to restore auth', e);
+      }
+    })();
+  }, []);
+
   const value = useMemo(
     () => ({
       token,
       user,
-      login: (t: string, u: User) => {
+      login: async (t: string, u: User) => {
         setToken(t);
         setUser(u);
+        try {
+          await AsyncStorage.setItem('auth_token', t);
+          await AsyncStorage.setItem('auth_user', JSON.stringify(u));
+        } catch (e) {
+          console.error('Failed to persist auth', e);
+        }
         registerForPushNotifications(t).catch(console.error);
       },
-      logout: () => {
+      logout: async () => {
         setToken(null);
         setUser(null);
+        try {
+          await AsyncStorage.removeItem('auth_token');
+          await AsyncStorage.removeItem('auth_user');
+        } catch (e) {
+          console.error('Failed to clear auth', e);
+        }
       }
     }),
     [token, user]
