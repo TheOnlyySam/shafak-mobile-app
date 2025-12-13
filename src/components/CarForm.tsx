@@ -178,6 +178,9 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
     typeof initial?.title === 'number' ? (initial?.title as 0 | 1) : (initial?.title ? 1 : 0)
   );
   const [issueDate, setIssueDate] = useState((initial as any)?.issueDate ?? '');
+  const [purchaseDate, setPurchaseDate] = useState((initial as any)?.purchaseDate ?? '');
+const [pickupDate, setPickupDate] = useState((initial as any)?.pickupDate ?? '');
+const [warehouseDate, setWarehouseDate] = useState((initial as any)?.warehouseDate ?? '');
 
   // ---- assignment
   const [userid, setUserId] = useState<string | null>(
@@ -497,6 +500,9 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
       carKey: carKey ?? 0,
       title: title ?? 0,
       issueDate: issueDate || null,
+    purchaseDate: purchaseDate || null,
+      pickupDate: pickupDate || null,
+      warehouseDate: warehouseDate || null,
 
       // assignment
       userid:     keep(prevUserId, userid),
@@ -670,6 +676,20 @@ export default function CarForm({ initial, onCancel, onSubmit, loading }: Props)
             <Label>Issue Date (YYYY-MM-DD)</Label>
             <Input value={issueDate} onChangeText={setIssueDate} placeholder="2025-09-16" />
           </View>
+          <View style={{ padding: 12 }}>
+  <Label>Purchase Date (YYYY-MM-DD)</Label>
+  <Input value={purchaseDate} onChangeText={setPurchaseDate} placeholder="2025-09-16" />
+</View>
+
+<View style={{ padding: 12 }}>
+  <Label>Pickup Date (YYYY-MM-DD)</Label>
+  <Input value={pickupDate} onChangeText={setPickupDate} placeholder="2025-09-16" />
+</View>
+
+<View style={{ padding: 12 }}>
+  <Label>Warehouse Date (YYYY-MM-DD)</Label>
+  <Input value={warehouseDate} onChangeText={setWarehouseDate} placeholder="2025-09-16" />
+</View>
         </View>
 
         {/* ASSIGNMENT */}

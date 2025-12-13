@@ -7,11 +7,11 @@ import {
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { createClient } from '../api/client';
+import { useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import type { Car } from '../types';
 import CarForm from '../components/CarForm';
 import CarCard from '../components/CarCard';
-
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 const THEME = {
@@ -123,6 +123,14 @@ const styles = StyleSheet.create({
 });
 
 export default function AdminCarsScreen() {
+  const route = useRoute<any>();
+  const filterType = route.params?.type as
+    | 'ALL'
+    | 'NEW'
+    | 'WAREHOUSE'
+    | 'SHIPPING'
+    | undefined;
+
   const { token, logout } = useAuth();
   const client = createClient(token);
 
@@ -159,17 +167,47 @@ export default function AdminCarsScreen() {
   useEffect(() => { load(); }, []);
 
   const filteredCars = useMemo(() => {
+    let base = cars;
+
+    if (filterType === 'NEW') {
+      base = cars.filter(
+        c => !c.warehouseDate && !c.containerNumber
+      );
+    }
+
+    if (filterType === 'WAREHOUSE') {
+      base = cars.filter(
+        c => !!c.warehouseDate && !c.containerNumber
+      );
+    }
+
+    if (filterType === 'SHIPPING') {
+      base = cars.filter(
+        c => !!c.containerNumber
+      );
+    }
+
     const ql = q.trim().toLowerCase();
-    if (!ql) return cars;
-    return cars.filter((c) => {
+    if (!ql) return base;
+
+    return base.filter((c) => {
       const it: any = c;
       const hay = [
-        it.vin, it.lot, it.containerNumber, it.destination,
-        it.make, it.model, it.terminalState, it.agent_name, it.agent_username, it.id
-      ].map((x: any) => (x ?? '').toString().toLowerCase()).join(' ');
+        it.vin,
+        it.lot,
+        it.containerNumber,
+        it.destination,
+        it.make,
+        it.model,
+        it.agent_name,
+        it.agent_username,
+        it.id,
+      ]
+        .map((x: any) => (x ?? '').toString().toLowerCase())
+        .join(' ');
       return hay.includes(ql);
     });
-  }, [cars, q]);
+  }, [cars, q, filterType]);
 
   function openShip(car: Car) {
     // Prefill SHIPPED while keeping ETA / containerNumber / everything else from DB

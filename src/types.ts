@@ -11,6 +11,7 @@ export type Car = {
   title?: number | 0 | 1 | boolean | null;
   eta?: string | null;                // YYYY-MM-DD
   containerNumber?: string | null;
+  warehouseDate?: string | null;     // YYYY-MM-DD
   destination?: string | null;
   terminal?: string | null;           // terminal *name*
   agent_id?: string | null;
@@ -85,4 +86,23 @@ export type User = {
 
   // Legacy API (some endpoints send `type`)
   type?: Role | null;
+};
+
+// =====================
+// Notifications (shared: app + website)
+// =====================
+export type AppNotificationType = 'GENERAL' | 'CAR_STATUS';
+
+export type AppNotification = {
+  id: string | number;
+
+  type: AppNotificationType;
+  title: string;
+  body: string;
+
+  carId?: string | number | null;
+  statusFrom?: string | null;
+  statusTo?: string | null;
+
+  createdAt: string;
 };

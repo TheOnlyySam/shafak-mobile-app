@@ -5,6 +5,7 @@ import { createClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import type { Car } from '../types';
 import CarCard from '../components/CarCard';
+import { useRoute } from '@react-navigation/native';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -83,6 +84,14 @@ export default function AgentCarsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
+  const route = useRoute<any>();
+  const filterType = route.params?.type as
+    | 'ALL'
+    | 'NEW'
+    | 'WAREHOUSE'
+    | 'SHIPPING'
+    | undefined;
+
   async function load() {
     setRefreshing(true);
     setError(null);
@@ -121,9 +130,26 @@ export default function AgentCarsScreen() {
   }, []);
 
   const filteredCars = useMemo(() => {
+    let base = cars;
+
+    // ---- STATUS-BASED LIFECYCLE ----
+    if (filterType === 'NEW') {
+      base = cars.filter(c => !c.status || c.status === 'NEW');
+    }
+
+    if (filterType === 'WAREHOUSE') {
+      base = cars.filter(c => c.status === 'WAREHOUSE');
+    }
+
+    if (filterType === 'SHIPPING') {
+      base = cars.filter(c => c.status === 'LOADED');
+    }
+
+    // ---- SEARCH (on top of lifecycle) ----
     const q = query.trim().toLowerCase();
-    if (!q) return cars;
-    return cars.filter((it) => {
+    if (!q) return base;
+
+    return base.filter((it) => {
       const hay = [
         it.vin,
         it.lot,
@@ -131,9 +157,7 @@ export default function AgentCarsScreen() {
         it.destination,
         (it as any).model,
         (it as any).make,
-        (it as any).status,
-        (it as any).terminalState,
-        (it as any).terminalStateCode,
+        it.status,
         it.eta,
         it.color,
       ]
@@ -141,7 +165,7 @@ export default function AgentCarsScreen() {
         .join(' ');
       return hay.includes(q);
     });
-  }, [cars, query]);
+  }, [cars, query, filterType]);
 
   return (
     <SafeAreaView style={styles.container}>

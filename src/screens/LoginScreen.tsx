@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -24,6 +24,7 @@ export default function LoginScreen() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const pwRef = useRef<TextInput>(null);
 
   async function onSubmit() {
     if (!username.trim() || !password) {
@@ -129,6 +130,8 @@ export default function LoginScreen() {
                 placeholderTextColor="#9ca3af"
                 style={{ fontSize: 16 }}
                 returnKeyType="next"
+                textContentType="username"
+                autoComplete="username"
               />
             </View>
 
@@ -145,9 +148,16 @@ export default function LoginScreen() {
               }}
             >
               <TextInput
+                key={showPw ? 'pw-visible' : 'pw-hidden'}
+                ref={pwRef}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPw}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+                autoComplete="password"
+                importantForAutofill="yes"
                 placeholder="••••••••"
                 placeholderTextColor="#9ca3af"
                 style={{ fontSize: 16 }}
@@ -156,7 +166,7 @@ export default function LoginScreen() {
               />
             </View>
             <Pressable
-              onPress={() => setShowPw((s) => !s)}
+              onPress={() => { setShowPw((s) => !s); setTimeout(() => pwRef.current?.focus(), 0); }}
               hitSlop={10}
               style={{ alignSelf: 'flex-end', marginTop: 8 }}
             >

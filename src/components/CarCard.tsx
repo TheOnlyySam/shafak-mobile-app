@@ -272,6 +272,24 @@ export default function CarCard({ car, onGallery, onEdit, onShip, onAddShipping,
           {auctionType ? (
             <View style={styles.pill}><Text style={styles.pillText}>{auctionType}</Text></View>
           ) : null}
+
+          {(car as any).purchaseDate ? (
+            <View style={styles.pill}>
+              <Text style={styles.pillText}>Purchase {(car as any).purchaseDate}</Text>
+            </View>
+          ) : null}
+
+          {(car as any).pickupDate ? (
+            <View style={styles.pill}>
+              <Text style={styles.pillText}>Pickup {(car as any).pickupDate}</Text>
+            </View>
+          ) : null}
+
+          {(car as any).warehouseDate ? (
+            <View style={styles.pill}>
+              <Text style={styles.pillText}>Warehouse {(car as any).warehouseDate}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* AGENT */}
